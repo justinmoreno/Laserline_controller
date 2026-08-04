@@ -42,7 +42,7 @@ class Laser:
         "Input 7",
     ]
 
-    def __init__(self, ip="192.168.1.13"):
+    def __init__(self, ip="192.168.0.13"):
 
         self.ip = ip
 

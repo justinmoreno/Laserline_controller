@@ -25,11 +25,30 @@ if not filenames:
     raise SystemExit("No files selected.")
 
 # ------------------------------------------------------
+# Specify line colors for each file
+# ------------------------------------------------------
+default_colors = [
+    "gray", 
+]
+line_colors = []
+
+print("Specify a line color for each selected file. Leave blank to use the default color.")
+for i, filename in enumerate(filenames):
+    default_color = default_colors[i % len(default_colors)]
+    basename = os.path.basename(filename)
+    color = input(
+        f"Color for '{basename}' [default: {default_color}]: "
+    ).strip()
+    if not color:
+        color = default_color
+    line_colors.append(color)
+
+# ------------------------------------------------------
 # Create plot
 # ------------------------------------------------------
 plt.figure(figsize=(10, 6))
 
-for filename in filenames:
+for index, filename in enumerate(filenames):
     times = []
     temperatures = []
     description_lines = []
@@ -131,6 +150,7 @@ for filename in filenames:
         elapsed_seconds,
         temperatures,
         linewidth=2,
+        color=line_colors[index],
         label=label
     )
 

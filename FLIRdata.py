@@ -117,10 +117,10 @@ image = ax_image.imshow(
 )
 
 cbar = fig_image.colorbar(image, ax=ax_image)
-cbar.set_label("Temperature (°C)")
+cbar.set_label("Temperature (°C)", fontsize=14, fontweight="bold")
 
-ax_image.set_xlabel("X Pixel")
-ax_image.set_ylabel("Y Pixel")
+ax_image.set_xlabel("X Pixel",fontsize=14, fontweight="bold")
+ax_image.set_ylabel("Y Pixel",fontsize=14, fontweight="bold")
 ax_image.set_title(
     "IR Temperature Map\n"
     "Click and drag to draw temperature profile lines"
@@ -130,9 +130,13 @@ ax_image.set_title(
 # Figure 2: Line temperature profiles
 fig_profile, ax_profile = plt.subplots(figsize=(10, 6))
 
-ax_profile.set_xlabel("Distance Along Line (pixels)")
-ax_profile.set_ylabel("Temperature (°C)")
-ax_profile.set_title("Temperature Profiles")
+ax = plt.gca()
+ax_profile.set_xlabel("Distance Along Line (pixels)",fontsize=14, fontweight="bold")
+ax_profile.set_ylabel("Temperature (°C)",fontsize=14, fontweight="bold")
+ax.tick_params(axis='both', which='major', labelsize=12, width=1.5)
+ax.xaxis.set_tick_params(labelsize=12)
+ax.yaxis.set_tick_params(labelsize=12)
+ax_profile.set_title("Temperature Profiles",fontsize=14, fontweight="bold")
 ax_profile.grid(True)
 
 fig_profile.tight_layout()

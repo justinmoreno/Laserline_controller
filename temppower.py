@@ -4,15 +4,178 @@ import matplotlib.pyplot as plt
 from tkinter import Tk
 from tkinter.filedialog import askopenfilenames
 
-# ------------------------------------------------------
-# Select multiple files
-# ------------------------------------------------------
+
+def read_file(filename):
+    """
+    Automatically detects and reads either:
+      1. Thermocouple log: Time / Temp
+      2. Pyrometer log:    time / ATemp
+
+    Returns:
+        time_seconds, temperatures, label
+    """
+
+    # --------------------------------------------------
+    # Read file
+    # --------------------------------------------------
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        with open(filename, "r", encoding="cp1252") as f:
+            lines = f.readlines()
+
+    # ==================================================
+    # Detect PYROMETER file
+    # ==================================================
+    for i, line in enumerate(lines):
+        columns = line.split()
+
+        if "time" in columns and "ATemp" in columns:
+
+            print(f"Pyrometer file detected: {filename}")
+
+            time_index = columns.index("time")
+            temp_index = columns.index("ATemp")
+
+            times = []
+            temperatures = []
+
+            for data_line in lines[i + 1:]:
+                parts = data_line.split()
+
+                if len(parts) <= max(time_index, temp_index):
+                    continue
+
+                try:
+                    t = float(parts[time_index])
+                    temp = float(parts[temp_index])
+
+                    times.append(t)
+                    temperatures.append(temp)
+
+                except ValueError:
+                    continue
+
+            # Time is already in seconds in pyrometer file
+            label = "Pyrometer"
+
+            return times, temperatures, label
+
+    # ==================================================
+    # Otherwise try THERMOCOUPLE format
+    # ==================================================
+
+    description_lines = []
+    reading_description = False
+    data_start = None
+
+    for i, line in enumerate(lines):
+
+        stripped = line.strip()
+
+        # Read description
+        if stripped.startswith("Description:"):
+            reading_description = True
+
+            first_description = stripped.split(
+                "Description:", 1
+            )[1].strip()
+
+            if first_description:
+                description_lines.append(first_description)
+
+            continue
+
+        if reading_description:
+
+            if stripped.startswith("Time"):
+                reading_description = False
+
+            elif stripped:
+                description_lines.append(stripped)
+
+        # Find Time / Temp header
+        columns = stripped.split()
+
+        if len(columns) >= 2:
+            if columns[0] == "Time" and columns[1] == "Temp":
+                data_start = i + 1
+                break
+
+    if data_start is None:
+        raise ValueError(
+            f"Could not recognize file format: {filename}"
+        )
+
+    print(f"Thermocouple file detected: {filename}")
+
+    times = []
+    temperatures = []
+
+    # --------------------------------------------------
+    # Read thermocouple data
+    # --------------------------------------------------
+    for line in lines[data_start:]:
+
+        parts = line.split()
+
+        # Example:
+        # 11:46:27 AM 20.3
+        if len(parts) < 3:
+            continue
+
+        try:
+            time_text = f"{parts[0]} {parts[1]}"
+
+            timestamp = datetime.strptime(
+                time_text,
+                "%I:%M:%S %p"
+            )
+
+            temperature = float(parts[2])
+
+            times.append(timestamp)
+            temperatures.append(temperature)
+
+        except ValueError:
+            continue
+
+    if not times:
+        raise ValueError(
+            f"No temperature data found in {filename}"
+        )
+
+    # Convert clock time to elapsed seconds
+    t0 = times[0]
+
+    elapsed_seconds = [
+        (t - t0).total_seconds()
+        for t in times
+    ]
+
+    # Use Description for legend
+    if description_lines:
+        label = ", ".join(description_lines)
+    else:
+        label = os.path.splitext(
+            os.path.basename(filename)
+        )[0]
+
+    return elapsed_seconds, temperatures, label
+
+
+# ======================================================
+# Select files
+# ======================================================
+
 root = Tk()
 root.withdraw()
 
 filenames = askopenfilenames(
-    title="Select Temperature Log Files",
+    title="Select Temperature Files",
     filetypes=[
+        ("Temperature Files", "*.log *.txt"),
         ("Log Files", "*.log"),
         ("Text Files", "*.txt"),
         ("All Files", "*.*")
@@ -24,147 +187,42 @@ root.destroy()
 if not filenames:
     raise SystemExit("No files selected.")
 
-# ------------------------------------------------------
-# Specify line colors for each file
-# ------------------------------------------------------
-default_colors = [
-    "gray", 
-]
-line_colors = []
 
-print("Specify a line color for each selected file. Leave blank to use the default color.")
-for i, filename in enumerate(filenames):
-    default_color = default_colors[i % len(default_colors)]
-    basename = os.path.basename(filename)
-    color = input(
-        f"Color for '{basename}' [default: {default_color}]: "
-    ).strip()
-    if not color:
-        color = default_color
-    line_colors.append(color)
+# ======================================================
+# Plot
+# ======================================================
 
-# ------------------------------------------------------
-# Create plot
-# ------------------------------------------------------
-plt.figure(figsize=(10, 6))
+plt.figure(figsize=(11, 7))
 
-for index, filename in enumerate(filenames):
-    times = []
-    temperatures = []
-    description_lines = []
+for filename in filenames:
 
     try:
-        with open(filename, "r", encoding="utf-8") as file:
-            lines = file.readlines()
-    except UnicodeDecodeError:
-        with open(filename, "r", encoding="cp1252") as file:
-            lines = file.readlines()
-    except OSError as error:
-        print(f"Could not open {filename}: {error}")
-        continue
+        time_seconds, temperatures, label = read_file(filename)
 
-    # --------------------------------------------------
-    # Read description
-    # --------------------------------------------------
-    reading_description = False
+        plt.plot(
+            time_seconds,
+            temperatures,
+            linewidth=2,
+            label=label
+        )
 
-    for line in lines:
-        stripped = line.strip()
+    except Exception as error:
+        print(f"Error reading {filename}:")
+        print(error)
 
-        if stripped.startswith("Description:"):
-            reading_description = True
 
-            first_description = stripped.split("Description:", 1)[1].strip()
-            if first_description:
-                description_lines.append(first_description)
-
-            continue
-
-        if reading_description:
-            if stripped.startswith("Time"):
-                break
-
-            if stripped:
-                description_lines.append(stripped)
-
-    # --------------------------------------------------
-    # Find beginning of temperature data
-    # --------------------------------------------------
-    data_start = None
-
-    for i, line in enumerate(lines):
-        if line.strip().startswith("Time"):
-            data_start = i + 1
-            break
-
-    if data_start is None:
-        print(f"Skipping {filename}: data header not found.")
-        continue
-
-    # --------------------------------------------------
-    # Read time and temperature data
-    # --------------------------------------------------
-    for line in lines[data_start:]:
-        parts = line.strip().split()
-
-        # Expected format:
-        # 11:46:27 AM 20.3
-        if len(parts) < 3:
-            continue
-
-        try:
-            time_text = f"{parts[0]} {parts[1]}"
-            temperature_text = parts[2]
-
-            timestamp = datetime.strptime(time_text, "%I:%M:%S %p")
-            temperature = float(temperature_text)
-
-            times.append(timestamp)
-            temperatures.append(temperature)
-
-        except ValueError:
-            continue
-
-    if not times:
-        print(f"Skipping {filename}: no valid temperature data found.")
-        continue
-
-    # --------------------------------------------------
-    # Convert clock time to elapsed seconds
-    # --------------------------------------------------
-    initial_time = times[0]
-    elapsed_seconds = [
-        (timestamp - initial_time).total_seconds()
-        for timestamp in times
-    ]
-
-    # --------------------------------------------------
-    # Create legend label
-    # --------------------------------------------------
-    if description_lines:
-        label = ", ".join(description_lines)
-    else:
-        label = os.path.splitext(os.path.basename(filename))[0]
-
-    plt.plot(
-        elapsed_seconds,
-        temperatures,
-        linewidth=2,
-        color=line_colors[index],
-        label=label
-    )
-
-# ------------------------------------------------------
+# ======================================================
 # Format graph
-# ------------------------------------------------------
-ax = plt.gca()
-ax.set_xlabel("Time (s)", fontsize=14, fontweight="bold")
-ax.set_ylabel("Temperature (°C)", fontsize=14, fontweight="bold")
-ax.tick_params(axis='both', which='major', labelsize=12, width=1.5)
-ax.xaxis.set_tick_params(labelsize=12)
-ax.yaxis.set_tick_params(labelsize=12)
-ax.set_title("Temperature vs. Time", fontsize=14, fontweight="bold")
-ax.grid(True)
+# ======================================================
+
+plt.xlabel("Time (s)")
+plt.ylabel("Temperature (°C)")
+plt.title("Temperature vs. Time")
+
+plt.grid(True)
+
 plt.legend()
+
 plt.tight_layout()
+
 plt.show()
